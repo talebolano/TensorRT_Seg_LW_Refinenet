@@ -1,6 +1,6 @@
 # TensorRT for a simple segmention model
 
-使用VOC Person Part 训练LW Refinenet ——resnet50 作为神经网络，生成onnx模型并导入c++中实现实时语义分割。
+使用VOC Person Part 训练[LW Refinenet ——resnet50](https://github.com/DrSleep/light-weight-refinenet) 作为神经网络，生成onnx模型并导入c++中实现实时语义分割。
 
 ## Todo
 
