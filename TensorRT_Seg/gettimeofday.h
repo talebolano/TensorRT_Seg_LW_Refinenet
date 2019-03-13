@@ -1,7 +1,5 @@
 #pragma once
 
-#pragma once
-
 #include < time.h >
 #include <windows.h> //I've ommited this line.
 #if defined(_MSC_VER) || defined(_MSC_EXTENSIONS)
