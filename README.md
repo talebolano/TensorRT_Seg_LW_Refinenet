@@ -4,6 +4,9 @@
 
 下载Resnet50 精度为64.1mIOU的onnx模型：[百度云](https://pan.baidu.com/s/18oCAH1Eu2fNwbtsek7av1w) 密码：kx0j 
 
+## 效果
+FP32 输入图像512*512，速度为16FPS
+
 ## Todo
 
 1.实现int8推理
