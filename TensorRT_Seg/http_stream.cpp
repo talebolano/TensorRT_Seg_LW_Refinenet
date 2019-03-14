@@ -109,12 +109,12 @@ extern "C" {
 image get_image_from_stream_cpp(CvCapture *cap)
 {
 	//IplImage* src = cvQueryFrame(cap);
-	IplImage* src;//ÕâÒ»¾äÔì³ÉÁËÄÚ´æĞ¹Â©
+	IplImage* src;//è¿™ä¸€å¥é€ æˆäº†å†…å­˜æ³„æ¼
 	static int once = 1;
 	if (once) {
 		once = 0;
 		do {
-			src = get_webcam_frame(cap);//ÕâÒ»¾äÔì³ÉÁËÄÚ´æĞ¹Â©
+			src = get_webcam_frame(cap);//è¿™ä¸€å¥é€ æˆäº†å†…å­˜æ³„æ¼
 			if (!src) return make_empty_image(0, 0, 0);
 		} while (src->width < 1 || src->height < 1 || src->nChannels < 1);
 		printf("Video stream: %d x %d \n", src->width, src->height);
@@ -125,10 +125,16 @@ image get_image_from_stream_cpp(CvCapture *cap)
 	if (!src) {
 		return make_empty_image(0, 0, 0);
 	}
-	image im = ipl_to_image(src);//ÖØÒª
-	rgbgr_image(im);//ÖØÒª    Ô­Ê¼bgr --¡·rgb
+	image im = ipl_to_image(src);//é‡è¦
+	rgbgr_image(im);//é‡è¦    åŸå§‹bgr --ã€‹rgb
 	cvReleaseImage(&src);
 	return im;
+}
+void shutdown_cap(CvCapture *cap)
+{
+	cv::VideoCapture &cpp_cap = *(cv::VideoCapture *)cap;
+	cpp_cap.release();
+
 }
 
 #endif    // OPENCV
