@@ -26,6 +26,7 @@
 
 #include "http_stream.h"
 #include "gettimeofday.h"
+#include "BatchStream.h"
 
 #endif
 using namespace nvinfer1;
@@ -36,10 +37,90 @@ static const int INPUT_C = 3;
 static const int OUTPUT_SIZE = 114688;
 static Logger gLogger;
 static int gUseDLACore{ -1 };
+const char* INPUT_BLOB_NAME = "0";
+//const char* OUTPUT_BLOB_NAME = "prob";
+
+
+
+std::string locateFile(const std::string& input)
+{
+
+	std::vector<std::string> dirs;
+	dirs.push_back(std::string("data/int8/") + std::string("/"));
+	dirs.push_back(std::string("data/") + std::string("/"));
+	return locateFile(input, dirs);
+
+}
+
+class Int8EntropyCalibrator : public IInt8EntropyCalibrator
+{
+public:
+	//（1，3，512，512）--》（500，3，512，512）
+	Int8EntropyCalibrator(batchstream& stream, bool readCache = true)
+		: mStream(stream)
+		, mReadCache(readCache)
+	{
+		//DimsNCHW dims = mStream.getDims();
+		mInputCount = 1*3*512*512;
+		CHECK(cudaMalloc(&mDeviceInput, mInputCount * sizeof(float)));
+		//mStream.reset(firstBatch);
+	}
+
+	virtual ~Int8EntropyCalibrator()
+	{
+		CHECK(cudaFree(mDeviceInput));
+	}
+
+	int getBatchSize() const override { return mStream.getBatchSize(); }
+
+	bool getBatch(void* bindings[], const char* names[], int nbBindings) override
+	{
+		if (!mStream.next())
+			return false;
+
+		CHECK(cudaMemcpy(mDeviceInput, mStream.get_image(), mInputCount * sizeof(float), cudaMemcpyHostToDevice));
+		assert(!strcmp(names[0], INPUT_BLOB_NAME));
+		bindings[0] = mDeviceInput;
+		return true;
+	}
+
+	const void* readCalibrationCache(size_t& length) override     //读缓存
+	{
+		mCalibrationCache.clear();
+		std::ifstream input(calibrationTableName(), std::ios::binary);
+		input >> std::noskipws;
+		if (mReadCache && input.good())
+			std::copy(std::istream_iterator<char>(input), std::istream_iterator<char>(), std::back_inserter(mCalibrationCache));
+
+		length = mCalibrationCache.size();
+		return length ? &mCalibrationCache[0] : nullptr;
+	}
+
+	void writeCalibrationCache(const void* cache, size_t length) override
+	{
+		std::ofstream output(calibrationTableName(), std::ios::binary);
+		output.write(reinterpret_cast<const char*>(cache), length);
+	}
+
+private:
+	static std::string calibrationTableName()
+	{
+		return std::string("CalibrationTable");
+	}
+	batchstream mStream;
+	bool mReadCache{ true };
+
+	size_t mInputCount;
+	void* mDeviceInput{ nullptr };
+	std::vector<char> mCalibrationCache;
+};
+
 
 void onnxToTRTModel(const std::string& modelFile, // name of the onnx model
 	unsigned int maxBatchSize,    // batch size - NB must be at least as large as the batch we want to run with
-	IHostMemory*& trtModelStream) // output buffer for the TensorRT model
+	IHostMemory*& trtModelStream,
+	DataType dataType,
+	IInt8Calibrator* calibrator) // output buffer for the TensorRT model
 {
 	int verbosity = (int)nvinfer1::ILogger::Severity::kWARNING;
 	// create the builder
@@ -59,11 +140,14 @@ void onnxToTRTModel(const std::string& modelFile, // name of the onnx model
 		gLogger.log(nvinfer1::ILogger::Severity::kERROR, msg.c_str());
 		exit(EXIT_FAILURE);
 	}
-
+	if ((dataType == DataType::kINT8 && !builder->platformHasFastInt8()) )
+		exit(EXIT_FAILURE);  //如果不支持kint8或不支持khalf就返回false
 	// Build the engine
-	builder->setMaxBatchSize(maxBatchSize);
-	builder->setMaxWorkspaceSize(3_GB); //不能超过你的实际能用的显存的大小，例如我的1060的可用为4.98GB，超过4.98GB会报错
 
+	builder->setMaxBatchSize(maxBatchSize);
+	builder->setMaxWorkspaceSize(4_GB); //不能超过你的实际能用的显存的大小，例如我的1060的可用为4.98GB，超过4.98GB会报错
+	builder->setInt8Mode(dataType == DataType::kINT8);  //
+	builder->setInt8Calibrator(calibrator);  //
 	samplesCommon::enableDLA(builder, gUseDLACore);
 	ICudaEngine* engine = builder->buildCudaEngine(*network);
 	assert(engine);
@@ -105,7 +189,7 @@ void doInference(IExecutionContext& context, float* input, float* output, int ba
 
 	// DMA the input to the GPU,  execute the batch asynchronously, and DMA it back:
 	CHECK(cudaMemcpyAsync(buffers[inputIndex], input, batchSize *INPUT_C* INPUT_H * INPUT_W * sizeof(float), cudaMemcpyHostToDevice, stream));
-	context.enqueue(batchSize, buffers, stream, nullptr);
+	context.enqueue(batchSize, buffers, stream, nullptr);//TensorRT的执行通常是异步的，因此将核加入队列放在CUDA流上
 	CHECK(cudaMemcpyAsync(output, buffers[outputIndex], batchSize * OUTPUT_SIZE * sizeof(float), cudaMemcpyDeviceToHost, stream));
 	cudaStreamSynchronize(stream);
 
@@ -116,11 +200,15 @@ void doInference(IExecutionContext& context, float* input, float* output, int ba
 }
 
 int main(int argc, char** argv)
-{
-	gUseDLACore = samplesCommon::parseDLA(argc, argv);
+{	
+	batchstream calibrationStream(500);
+	Int8EntropyCalibrator calibrator(calibrationStream);
+
+	//gUseDLACore = samplesCommon::parseDLA(argc, argv);
 	// create a TensorRT model from the onnx model and serialize it to a stream
 	IHostMemory* trtModelStream{ nullptr };
-	onnxToTRTModel("D:/pytorch/light-weight-refinenet/test_up.onnx", 1, trtModelStream);  //读onnx模型,序列化引擎
+	onnxToTRTModel("D:/pytorch/light-weight-refinenet/test_up.onnx", 1, trtModelStream, DataType::kINT8, &calibrator);  //读onnx模型,序列化引擎
+	std::cout << "rialize model ready" << std::endl;
 	assert(trtModelStream != nullptr);
 	// deserialize the engine    DLA加速
 	//反序列化引擎
@@ -151,11 +239,13 @@ int main(int argc, char** argv)
 	{
 		cap = get_capture_webcam(cam_index);;
 	}
-	cvNamedWindow("Segmention", CV_WINDOW_NORMAL); //创建窗口显示图像，可以鼠标随意拖动窗口改变大小
-	cvResizeWindow("Segmention", 512, 512);//设定窗口大小
+	cvNamedWindow("Segmentation", CV_WINDOW_NORMAL); //创建窗口显示图像，可以鼠标随意拖动窗口改变大小
+	cvResizeWindow("Segmentation", 512, 512);//设定窗口大小
 	float prob[OUTPUT_SIZE];
 	float fps = 0;
-	while (1) {
+	//for(int i =0;i<500;i++)
+	while (1) 
+	{
 		struct timeval tval_before, tval_after, tval_result;
 		gettimeofday(&tval_before, NULL);
 		image in = get_image_from_stream_cpp(cap);//c,h,w结构且已经处以225，浮点数
@@ -168,7 +258,7 @@ int main(int argc, char** argv)
 		image real_out = Tranpose(prob); //[128，128，7]
 
 
-		show_image(real_out, "Segmention");   //显示图片
+		show_image(real_out, "Segmentation");   //显示图片
 
 		free_image(in);
 		free_image(in_s);
@@ -180,13 +270,16 @@ int main(int argc, char** argv)
 		printf("\nFPS:%.0f\n", fps);
 		fps = .9*fps + .1*curr;
 	}
-	// destroy the engine
+	//cvdestroyAllWindows();
 	cvDestroyAllWindows();
 	shutdown_cap(cap);
-	std::cout << "shutdown" << std::endl;
+
 	// destroy the engine
 	context->destroy();
 	engine->destroy();
 	runtime->destroy();
-	return 0;
+	std::cout << "shut down" << std::endl;
+	//nvcaffeparser1::shutdownProtobufLibrary();
+
+	return EXIT_SUCCESS;//无法退出？解决
 }
