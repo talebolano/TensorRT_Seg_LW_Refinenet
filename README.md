@@ -8,12 +8,14 @@ TensorRT for a simple segmentation model
 ## 效果
 实验GPU：gtx1060  输入图像：512*512
 
-pytorch源码  11FPS
+###
+|模型|速度|
+|:-----:|--------|
+|pytorch源码|11FPS|
+|FP32|16FPS|
+|INT8|21FPS|
 
-FP32  16FPS
-
-INT8  21FPS
-
+###
 
 ## Todo
 
