@@ -7,50 +7,37 @@
 #include <iostream>
 #include <sstream>
 #include <sys/stat.h>
-#include <time.h>
 
 #include "NvInfer.h"
 #include "NvOnnxParser.h"
 #include "common.h"
-#include "image.h"
-#include "NvInferPlugin.h"
 
-
-
-#ifdef OPENCV
-#include "opencv2/highgui/highgui_c.h"
-#include "opencv2/core/version.hpp"
-#ifndef CV_VERSION_EPOCH
-#include "opencv2/videoio/videoio_c.h"
-#endif
-
-#include "http_stream.h"
-#include "gettimeofday.h"
+#include<opencv2/opencv.hpp>
 #include "BatchStream.h"
+#include "image.hpp"
+
+
+
+#ifdef WIN32
+
+#include <time.h>
+#include "gettimeofday.h"
+#else
+#include <sys/time.h>
 
 #endif
-using namespace nvinfer1;
 
+using namespace nvinfer1;
+std::stringstream gieModelStream;
 static const int INPUT_H = 512;
 static const int INPUT_W = 512;
 static const int INPUT_C = 3;
 static const int OUTPUT_SIZE = 114688;
+static const int INPUT_SIZE = 786432;
 static Logger gLogger;
 static int gUseDLACore{ -1 };
 const char* INPUT_BLOB_NAME = "0";
 //const char* OUTPUT_BLOB_NAME = "prob";
-
-
-
-std::string locateFile(const std::string& input)
-{
-
-	std::vector<std::string> dirs;
-	dirs.push_back(std::string("data/int8/") + std::string("/"));
-	dirs.push_back(std::string("data/") + std::string("/"));
-	return locateFile(input, dirs);
-
-}
 
 class Int8EntropyCalibrator : public IInt8EntropyCalibrator
 {
@@ -120,7 +107,8 @@ void onnxToTRTModel(const std::string& modelFile, // name of the onnx model
 	unsigned int maxBatchSize,    // batch size - NB must be at least as large as the batch we want to run with
 	IHostMemory*& trtModelStream,
 	DataType dataType,
-	IInt8Calibrator* calibrator) // output buffer for the TensorRT model
+	IInt8Calibrator* calibrator,
+	std::string save_name) // output buffer for the TensorRT model
 {
 	int verbosity = (int)nvinfer1::ILogger::Severity::kWARNING;
 	// create the builder
@@ -128,11 +116,6 @@ void onnxToTRTModel(const std::string& modelFile, // name of the onnx model
 	nvinfer1::INetworkDefinition* network = builder->createNetwork();
 
 	auto parser = nvonnxparser::createParser(*network, gLogger);
-
-
-	//Optional - uncomment below lines to view network layer information
-	//config->setPrintLayerInfo(true);
-	//parser->reportParsingInfo();
 
 	if (!parser->parseFromFile(modelFile.c_str(), verbosity))
 	{
@@ -157,6 +140,14 @@ void onnxToTRTModel(const std::string& modelFile, // name of the onnx model
 
 	// serialize the engine, then close everything down  序列化
 	trtModelStream = engine->serialize();
+
+	gieModelStream.write((const char*)trtModelStream->data(), trtModelStream->size());
+	std::ofstream SaveFile(save_name, std::ios::out | std::ios::binary);
+	SaveFile.seekp(0, std::ios::beg);
+	SaveFile << gieModelStream.rdbuf();
+	gieModelStream.seekg(0, gieModelStream.beg);
+
+
 	engine->destroy();
 	network->destroy();
 	builder->destroy();
@@ -199,17 +190,50 @@ void doInference(IExecutionContext& context, float* input, float* output, int ba
 	CHECK(cudaFree(buffers[outputIndex]));
 }
 
-int main(int argc, char** argv)
-{	
-	batchstream calibrationStream(500);
-	Int8EntropyCalibrator calibrator(calibrationStream);
 
+
+int do_serialize(int argc, char** argv)
+{
+	IHostMemory* trtModelStream{ nullptr };
 	//gUseDLACore = samplesCommon::parseDLA(argc, argv);
 	// create a TensorRT model from the onnx model and serialize it to a stream
-	IHostMemory* trtModelStream{ nullptr };
-	onnxToTRTModel("D:/pytorch/light-weight-refinenet/test_up.onnx", 1, trtModelStream, DataType::kINT8, &calibrator);  //读onnx模型,序列化引擎
+	std::string file_name=argv[3];
+	std::string modelFile = argv[5];
+	if (0 == strcmp(argv[2], "int8"))
+	{
+		if (argc != 7)
+		{
+			std::cout << "no_have_serialize_txt" << std::endl;
+			std::cout << "int8" << std::endl;
+			std::cout << "cam or video file" << std::endl;
+			std::cout << "save serialize name" << std::endl;
+			std::cout << "onnx name" << std::endl;
+			std::cout << "batch calibration name" << std::endl;
+			return 1;
+		}
+		std::string batchfile = argv[6];
+		batchstream calibrationStream(500, batchfile);
+		Int8EntropyCalibrator calibrator(calibrationStream);
+		std::cout << "using int8 mode" << std::endl;
+		onnxToTRTModel(modelFile, 1, trtModelStream, DataType::kINT8, &calibrator, file_name);  //读onnx模型,序列化引擎
+	}
+	else
+	{   
+		if (argc != 6)
+		{
+			std::cout << "no_have_serialize_txt" << std::endl;
+			std::cout << "float32" << std::endl;
+			std::cout << "cam or video file" << std::endl;
+			std::cout << "save serialize name" << std::endl;
+			std::cout << "onnx name" << std::endl;
+			return 1;
+		}
+		std::cout << "using float32 mode" << std::endl;
+		onnxToTRTModel(modelFile, 1, trtModelStream, DataType::kFLOAT, nullptr, file_name);  //读onnx模型,序列化引擎
+	}
 	std::cout << "rialize model ready" << std::endl;
 	assert(trtModelStream != nullptr);
+	
 	// deserialize the engine    DLA加速
 	//反序列化引擎
 	IRuntime* runtime = createInferRuntime(gLogger);
@@ -220,59 +244,64 @@ int main(int argc, char** argv)
 	}
 	//反序列化
 	ICudaEngine* engine = runtime->deserializeCudaEngine(trtModelStream->data(), trtModelStream->size(), nullptr);
+
 	assert(engine != nullptr);
 	trtModelStream->destroy();
 	IExecutionContext* context = engine->createExecutionContext();
 	assert(context != nullptr);
 
-
 	int cam_index = 0;
-	char *filename = (argc > 1) ? argv[1] : 0;
-	std::cout << "Hello World!\n";
-	CvCapture * cap;
-
-	if (filename) {
-		//cap = cvCaptureFromFile(filename);
-		cap = get_capture_video_stream(filename);
-	}
+	cv::VideoCapture cap;
+	if (0 == strcmp(argv[4], "cam"))	{
+		cap.open(cam_index);	}
 	else
-	{
-		cap = get_capture_webcam(cam_index);;
-	}
-	cvNamedWindow("Segmentation", CV_WINDOW_NORMAL); //创建窗口显示图像，可以鼠标随意拖动窗口改变大小
-	cvResizeWindow("Segmentation", 512, 512);//设定窗口大小
+	{	cap.open(argv[4]);	}
+
+	if (!cap.isOpened())	{		
+		std::cout << "Error: video-stream can't be opened! \n";
+		return 1;	}
+	cv::namedWindow("somename", CV_WINDOW_NORMAL);
+	cv::resizeWindow("somename", 512, 512);
+	cv::Mat frame;
 	float prob[OUTPUT_SIZE];
+	float* data;
 	float fps = 0;
-	//for(int i =0;i<500;i++)
-	while (1) 
+
+	cv::Mat out;
+	out.create(128, 128, CV_32FC(7));
+	cv::Mat real_out;
+	real_out.create(512, 512, CV_32FC(7));
+	cv::Mat real_out_;
+	real_out_.create(512, 512, CV_8UC3);
+	while (1)
 	{
 		struct timeval tval_before, tval_after, tval_result;
 		gettimeofday(&tval_before, NULL);
-		image in = get_image_from_stream_cpp(cap);//c,h,w结构且已经处以225，浮点数
-		image in_s = resize_image(in, 512, 512);//改变图片大小为标准长宽，用于网络一的图片
-		in_s = normal_image(in_s);//正则化
-		//prob = 【1，7，128，128】-->imgae[7,128,128]-->【7,512，512】-->[3,512,512]
-		//【512，512，7】-->[512,512,1]
-		// run inference   进行推理
-		doInference(*context, in_s.data, prob, 1);
-		image real_out = Tranpose(prob); //[128，128，7]
-
-
-		show_image(real_out, "Segmentation");   //显示图片
-
-		free_image(in);
-		free_image(in_s);
-		free_image(real_out);
+		cap >> frame;
+		cv::cvtColor(frame, frame, cv::COLOR_BGR2RGB);
+		cv::Mat dst = cv::Mat::zeros(512, 512, CV_32FC3);//新建一张512x512尺寸的图片Mat
+		cv::resize(frame, dst, dst.size());
+		data = normal(dst);
+		doInference(*context, data, prob, 1);//chw
+		out = read2mat(prob, out);
+		//hwc
+		cv::resize(out, real_out, real_out.size());
+		real_out_ = map2threeunchar(real_out, real_out_);
+		cv::imshow("somename", real_out_);
+		//show_image(real_out, "Segmentation");   //显示图片
+		std::free(data);
+		//free_image(real_out);
 		if (cvWaitKey(10) == 27) break;
 		gettimeofday(&tval_after, NULL);
 		timersub(&tval_after, &tval_before, &tval_result);
 		float curr = 1000000.f / ((long int)tval_result.tv_usec);
+		//std::cout << (float)tval_result.tv_usec << std::endl;
 		printf("\nFPS:%.0f\n", fps);
 		fps = .9*fps + .1*curr;
+		//fps = curr;
 	}
-	//cvdestroyAllWindows();
-	cvDestroyAllWindows();
-	shutdown_cap(cap);
+	cv::destroyAllWindows();
+	cap.release();
 
 	// destroy the engine
 	context->destroy();
@@ -281,5 +310,136 @@ int main(int argc, char** argv)
 	std::cout << "shut down" << std::endl;
 	//nvcaffeparser1::shutdownProtobufLibrary();
 
-	return EXIT_SUCCESS;//无法退出？解决
+	return 0;//无法退出？解决
+}
+
+
+int do_deserialize(int argc, char ** argv)
+{
+	gieModelStream.seekg(0, gieModelStream.beg);
+	std::ifstream serialize_iutput_stream(argv[3], std::ios::in | std::ios::binary);
+	if (!serialize_iutput_stream) {
+		std::cout << "cannot find serialize file" << std::endl;
+		return 1;
+	}
+	serialize_iutput_stream.seekg(0);
+
+	gieModelStream << serialize_iutput_stream.rdbuf();
+	gieModelStream.seekg(0, std::ios::end);
+	const int modelSize = gieModelStream.tellg();
+	gieModelStream.seekg(0, std::ios::beg);
+	void* modelMem = malloc(modelSize);
+	gieModelStream.read((char*)modelMem, modelSize);
+
+	IHostMemory* trtModelStream{ nullptr };
+	IBuilder* builder = createInferBuilder(gLogger);
+	if (0==strcmp(argv[2],"int8"))
+	{	
+		if (argc != 6)
+		{
+			std::cout << "have_serialize_txt" << std::endl;
+			std::cout << "int8" << std::endl;
+			std::cout << "cam or video file" << std::endl;
+			std::cout << "saved serialize name" << std::endl;
+			std::cout << "batch calibration name" << std::endl;
+			return 1;
+		}
+		std::string batchfile = argv[5];
+		batchstream calibrationStream(500, batchfile);
+		Int8EntropyCalibrator calibrator(calibrationStream);
+		std::cout << "using int8 mode" << std::endl;
+		builder->platformHasFastInt8();
+		builder->setInt8Mode(true);  //
+		builder->setInt8Calibrator(&calibrator);  //
+	}
+	else
+	{	
+		if (argc != 5)
+		{
+			std::cout << "have_serialize_txt" << std::endl;
+			std::cout << "float" << std::endl;
+			std::cout << "cam or video file" << std::endl;
+			std::cout << "saved serialize name" << std::endl;
+			return 1;
+		}
+		std::cout << "using float32 mode" << std::endl;
+	}
+	builder->destroy();
+	IRuntime* runtime = createInferRuntime(gLogger);
+
+	ICudaEngine* engine = runtime->deserializeCudaEngine(modelMem, modelSize, NULL);
+	std::free(modelMem);
+	assert(engine != nullptr);
+	IExecutionContext* context = engine->createExecutionContext();
+	assert(context != nullptr);
+	int cam_index = 0;
+	char *filename = (argc > 3) ? argv[3] : 0;
+	std::cout << "Hello World!\n";
+	cv::VideoCapture cap;
+	if (0 == strcmp(argv[4], "cam")) {
+		cap.open(cam_index);	}
+	else	{		cap.open(argv[4]);}
+	if (!cap.isOpened()){
+		std::cout << "Error: video-stream can't be opened! \n";
+		return 1;}
+	cv::namedWindow("somename", CV_WINDOW_NORMAL);
+	cv::resizeWindow("somename", 512, 512);
+	cv::Mat frame;
+	float prob[OUTPUT_SIZE];
+	float* data;
+	float fps = 0;
+
+	cv::Mat out;
+	out.create(128, 128, CV_32FC(7));
+	cv::Mat real_out;
+	real_out.create(512, 512, CV_32FC(7));
+	cv::Mat real_out_;
+	real_out_.create(512, 512, CV_8UC3);
+	while (1) 
+	{
+		struct timeval tval_before, tval_after, tval_result;
+		gettimeofday(&tval_before, NULL);
+		cap >> frame;
+		cv::cvtColor(frame, frame, cv::COLOR_BGR2RGB);
+		cv::Mat dst = cv::Mat::zeros(512, 512, CV_32FC3);//新建一张512x512尺寸的图片Mat
+		cv::resize(frame, dst, dst.size());
+		data = normal(dst);
+
+		doInference(*context, data, prob, 1);//chw
+		out = read2mat(prob, out);
+		//hwc
+		cv::resize(out, real_out, real_out.size());
+		real_out_ =  map2threeunchar(real_out, real_out_);
+
+		cv::imshow("somename", real_out_);
+		std::free(data);
+		if (cvWaitKey(10) == 27) break;
+		gettimeofday(&tval_after, NULL);
+		timersub(&tval_after, &tval_before, &tval_result);
+		float curr = 1000000.f / ((long int)tval_result.tv_usec);
+		printf("\nFPS:%.0f\n", fps);
+		fps = .9*fps + .1*curr;
+	}
+	cv::destroyAllWindows();
+	cap.release();
+	// destroy the engine
+	context->destroy();
+	engine->destroy();
+	runtime->destroy();
+	std::cout << "shut down" << std::endl;
+	return 0;
+}
+
+int main(int argc, char** argv)
+{	
+
+	if (0 == strcmp(argv[1], "have_serialize_txt"))
+	{	
+		do_deserialize(argc, argv);
+	}
+	else
+	{
+		do_serialize(argc, argv);
+	}
+	return 0;
 }
