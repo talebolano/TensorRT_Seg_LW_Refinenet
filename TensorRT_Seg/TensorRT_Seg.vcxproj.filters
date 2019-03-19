@@ -18,27 +18,21 @@
     <ClCompile Include="TensorRT_Seg.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="image.c">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="http_stream.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
     <ClCompile Include="gettimeofday.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="image.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="http_stream.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="image.h">
+    <ClInclude Include="BatchStream.h">
       <Filter>头文件</Filter>
     </ClInclude>
     <ClInclude Include="gettimeofday.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="BatchStream.h">
+    <ClInclude Include="image.hpp">
       <Filter>头文件</Filter>
     </ClInclude>
   </ItemGroup>
