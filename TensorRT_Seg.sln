@@ -7,16 +7,24 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "TensorRT_Seg", "TensorRT_Se
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|ARM = Debug|ARM
+		Debug|ARM64 = Debug|ARM64
 		Debug|x64 = Debug|x64
 		Debug|x86 = Debug|x86
+		Release|ARM = Release|ARM
+		Release|ARM64 = Release|ARM64
 		Release|x64 = Release|x64
 		Release|x86 = Release|x86
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{830471E0-ED45-4CE5-874F-1F51FE8F7657}.Debug|ARM.ActiveCfg = Debug|Win32
+		{830471E0-ED45-4CE5-874F-1F51FE8F7657}.Debug|ARM64.ActiveCfg = Debug|Win32
 		{830471E0-ED45-4CE5-874F-1F51FE8F7657}.Debug|x64.ActiveCfg = Debug|x64
 		{830471E0-ED45-4CE5-874F-1F51FE8F7657}.Debug|x64.Build.0 = Debug|x64
 		{830471E0-ED45-4CE5-874F-1F51FE8F7657}.Debug|x86.ActiveCfg = Debug|Win32
 		{830471E0-ED45-4CE5-874F-1F51FE8F7657}.Debug|x86.Build.0 = Debug|Win32
+		{830471E0-ED45-4CE5-874F-1F51FE8F7657}.Release|ARM.ActiveCfg = Release|Win32
+		{830471E0-ED45-4CE5-874F-1F51FE8F7657}.Release|ARM64.ActiveCfg = Release|Win32
 		{830471E0-ED45-4CE5-874F-1F51FE8F7657}.Release|x64.ActiveCfg = Release|x64
 		{830471E0-ED45-4CE5-874F-1F51FE8F7657}.Release|x64.Build.0 = Release|x64
 		{830471E0-ED45-4CE5-874F-1F51FE8F7657}.Release|x86.ActiveCfg = Release|Win32
@@ -29,3 +37,4 @@ Global
 		SolutionGuid = {BA9B6600-09D6-4DC6-BD4F-77B1D6A2CF87}
 	EndGlobalSection
 EndGlobal
+
