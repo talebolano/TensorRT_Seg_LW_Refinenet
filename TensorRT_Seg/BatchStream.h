@@ -7,13 +7,14 @@
 #include <assert.h>
 #include <algorithm>
 #include "NvInfer.h"
+#include "image.hpp"
 
 
 class batchstream
 {
 public:
-	batchstream(int maxbatch)
-		:Maxbatch(maxbatch)
+	batchstream(int maxbatch,std::string batchfile)
+		:Maxbatch(maxbatch),Batchfile(batchfile)
 	{
 		int mImageSize = 1 * 3 * 512 * 512;
 		im.data = 0;
@@ -25,8 +26,10 @@ public:
 	bool next()
 	{
 		if (Count == Maxbatch) return false;
-		std::string names = std::string("D:\\pytorch\\light-weight-refinenet\\VOCtrainval_11-May-2012\\VOCdevkit\\VOC2012\\batch500test\\batch") + std::to_string(Count++) + std::string(".jpg");
+		//std::string names = std::string("D:\\pytorch\\light-weight-refinenet\\VOCtrainval_11-May-2012\\VOCdevkit\\VOC2012\\batch500test\\batch") + std::to_string(Count++) + std::string(".jpg");
+		std::string names = Batchfile+ std::string("/batch") + std::to_string(Count++) + std::string(".jpg");
 		IplImage* src = cvLoadImage(names.c_str());
+	
 		unsigned char *data = (unsigned char *)src->imageData;
 		int h = src->height;
 		int w = src->width;
@@ -43,7 +46,7 @@ public:
 			}
 		}
 		std::cout << Count << std::endl;
-		rgb_image(im);
+		rgb2image(im);
 		cvReleaseImage(&src);
 		return true;
 	}
@@ -51,10 +54,11 @@ public:
 	{
 		return im.data;
 	}
-	void rgb_image(image im);
+	void rgb2image(image im);
 	int getBatchSize() const { return mBatchSize; }
 private:
 	int Maxbatch;
+	std::string Batchfile;
 	int mBatchSize = 1;
 	int Count = 0;
 	image im;
@@ -62,9 +66,7 @@ private:
 };
 
 
-
-
-void batchstream::rgb_image(image im)
+void batchstream::rgb2image(image im)
 {
 	int i;
 	for (i = 0; i < im.w*im.h; ++i) {
@@ -74,7 +76,7 @@ void batchstream::rgb_image(image im)
 	}
 }
 
-
-
 #endif
+
+
 
