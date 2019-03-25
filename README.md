@@ -42,4 +42,5 @@ TensorRT_Seg.exe have_serialize_txt  float32  here_your_video_file_name_or_cam s
 ~~1.实现int8推理~~
 
 ~~2.实现upsample插件层（目前使用反卷积层代替）~~(tensorRT5.1已有upsmaplenearest的操作，还是没有bilinear的操作)
+
 3.实现现有模型的剪枝，并进行时间的比较
