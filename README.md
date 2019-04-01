@@ -1,5 +1,6 @@
 TensorRT for a simple segmentation model
 =======================================
+[![LICENSE](https://img.shields.io/badge/license-NPL%20(The%20996%20Prohibited%20License)-blue.svg)](https://github.com/996icu/996.ICU/blob/master/LICENSE)
 
 使用VOC Person Part 训练[LW Refinenet ——resnet50](https://github.com/DrSleep/light-weight-refinenet) 作为神经网络，生成onnx模型并导入c++中实现实时语义分割。
 
