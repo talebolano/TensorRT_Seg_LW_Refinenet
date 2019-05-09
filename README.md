@@ -35,7 +35,7 @@ TensorRT_Seg.exe no_have_serialize_txt  float32  save_serialize_name here_your_o
 TensorRT_Seg.exe have_serialize_txt  int8  saved_serialize_name here_your_video_file_name_or_cam here_your_Calibrator_file_name
 
 
-TensorRT_Seg.exe have_serialize_txt  float32  here_your_video_file_name_or_cam saved_serialize_name 
+TensorRT_Seg.exe have_serialize_txt  float32 saved_serialize_name here_your_video_file_name_or_cam
 
 
 ## Todo
