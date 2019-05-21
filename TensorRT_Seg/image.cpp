@@ -25,7 +25,7 @@ float* normal(cv::Mat img) {
 			//cv::Vec3b *p2 = image.ptr<cv::Vec3b>(i);
 			for (int j = 0; j < img.cols; ++j)
 			{
-				data[c * img.cols * img.rows + i * img.rows + j] = (p1[j][c] / 255. - kMean[c]) / kStdDev[c];
+				data[c * img.cols * img.rows + i * img.cols + j] = (p1[j][c] / 255. - kMean[c]) / kStdDev[c];
 			}
 		}
 	}
