@@ -26,7 +26,7 @@ TensorRT for a simple segmentation model
 TensorRT_Seg.exe no_have_serialize_txt  int8  save_serialize_name  here_your_video_file_name_or_cam here_your_onnxmodel_name here_your_Calibrator_file_name
 
 
-TensorRT_Seg.exe no_have_serialize_txt  float32  save_serialize_name here_your_onnxmodel_name here_your_video_file_name_or_cam 
+TensorRT_Seg.exe no_have_serialize_txt  float32  save_serialize_name here_your_video_file_name_or_cam here_your_onnxmodel_name 
 
 
 保存序列化模型后：
