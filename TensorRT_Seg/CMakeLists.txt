@@ -49,5 +49,5 @@ endif()
 ADD_EXECUTABLE(TensorRT_Seg TensorRT_Seg.cpp image.cpp ${headers})
 
 target_include_directories(TensorRT_Seg PUBLIC ${CUDA_INCLUDE_DIRS} ${TENSORRT_INCLUDE_DIR} ${CUDNN_INCLUDE_DIR})
-
+# my cuda is 10.1 ，if your cuda isn‘t cuda10.1， please change this line
 TARGET_LINK_LIBRARIES(TensorRT_Seg ${OpenCV_LIBS} ${TENSORRT_LIBRARY} /usr/local/cuda-10.1/lib64/libcudart.so.10.1)
